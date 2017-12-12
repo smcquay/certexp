@@ -3,42 +3,93 @@ package main
 import (
 	"bufio"
 	"crypto/tls"
+	"flag"
 	"fmt"
 	"log"
 	"net"
 	"os"
+	"sync"
+	"time"
+
+	"github.com/pkg/errors"
 )
 
+var conc = flag.Int("workers", 8, "number of fetches to perform concurrently")
+
 func main() {
-	s := bufio.NewScanner(os.Stdin)
-	for s.Scan() {
-		line := s.Text()
-		if line == "" {
-			continue
-		}
+	flag.Parse()
+	work := make(chan job)
+	go func() {
+		s := bufio.NewScanner(os.Stdin)
+		for s.Scan() {
+			line := s.Text()
+			if line == "" {
+				continue
+			}
 
-		host, port := line, "443"
-		if h, p, err := net.SplitHostPort(line); err == nil {
-			host, port = h, p
-		}
+			host, port := line, "443"
+			if h, p, err := net.SplitHostPort(line); err == nil {
+				host, port = h, p
+			}
 
-		c, err := tls.Dial("tcp", fmt.Sprintf("%v:%v", host, port), nil)
-		if err != nil {
-			log.Fatalf("dial: %v", err)
+			work <- job{host, port}
 		}
-		if err := c.Handshake(); err != nil {
-			log.Fatalf("handshake: %v", err)
-		}
-		if err := c.Close(); err != nil {
-			log.Fatalf("close: %v", err)
-		}
+		close(work)
+	}()
 
-		for _, chain := range c.ConnectionState().VerifiedChains {
-			for _, cert := range chain {
-				if cert.DNSNames != nil {
-					fmt.Printf("%-24v %v\n", host, cert.NotAfter)
-				}
+	wg := sync.WaitGroup{}
+	sema := make(chan bool, *conc)
+	for w := range work {
+		wg.Add(1)
+		go func(j job) {
+			sema <- true
+			defer func() {
+				wg.Done()
+				<-sema
+			}()
+
+			res, err := getDate(j.host, j.port)
+			if err != nil {
+				log.Printf("get date: %+v", err)
+				return
+			}
+			fmt.Printf("%-24v %v\n", res.host, res.exp)
+		}(w)
+	}
+	wg.Wait()
+}
+
+type job struct {
+	host string
+	port string
+}
+
+type res struct {
+	host string
+	exp  time.Time
+}
+
+func getDate(host, port string) (res, error) {
+	r := res{
+		host: fmt.Sprintf("%v:%v", host, port),
+	}
+	c, err := tls.Dial("tcp", r.host, nil)
+	if err != nil {
+		return r, errors.Wrap(err, "dial")
+	}
+	if err := c.Handshake(); err != nil {
+		return r, errors.Wrap(err, "handshake")
+	}
+	if err := c.Close(); err != nil {
+		return r, errors.Wrap(err, "close")
+	}
+
+	for _, chain := range c.ConnectionState().VerifiedChains {
+		for _, cert := range chain {
+			if cert.DNSNames != nil {
+				r.exp = cert.NotAfter
 			}
 		}
 	}
+	return r, nil
 }
