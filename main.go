@@ -40,9 +40,9 @@ func main() {
 	wg := sync.WaitGroup{}
 	sema := make(chan bool, *conc)
 	for w := range work {
+		sema <- true
 		wg.Add(1)
 		go func(j job) {
-			sema <- true
 			defer func() {
 				wg.Done()
 				<-sema
