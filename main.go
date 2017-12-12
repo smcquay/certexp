@@ -50,7 +50,7 @@ func main() {
 
 			res, err := getDate(j.host, j.port)
 			if err != nil {
-				log.Printf("get date: %+v", err)
+				log.Printf("get date: %v", err)
 				return
 			}
 			fmt.Printf("%-24v %v\n", res.host, res.exp)
