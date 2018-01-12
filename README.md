@@ -1,11 +1,13 @@
 # certexp
 
-report certificate expiry for a collection of servers, which yields equivalent
-information to:
+A tool that reports certificate expiry for a collection of servers. It yields
+equivalent information to:
 
 ```bash
 $ echo | openssl s_client -connect $hostname:$port 2> /dev/null | openssl x509 -noout -dates | grep notAfter
 ```
+
+but fetches the information for a colleciton of hosts and does it concurrently.
 
 ## example usage
 
