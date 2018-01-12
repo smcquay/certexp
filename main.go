@@ -18,24 +18,13 @@ var conc = flag.Int("workers", 8, "number of fetches to perform concurrently")
 
 func main() {
 	flag.Parse()
+
 	work := make(chan job)
-	go func() {
-		s := bufio.NewScanner(os.Stdin)
-		for s.Scan() {
-			line := s.Text()
-			if line == "" {
-				continue
-			}
-
-			host, port := line, "443"
-			if h, p, err := net.SplitHostPort(line); err == nil {
-				host, port = h, p
-			}
-
-			work <- job{host, port}
-		}
-		close(work)
-	}()
+	if len(flag.Args()) > 0 {
+		go fromArgs(work, flag.Args())
+	} else {
+		go fromStdin(work)
+	}
 
 	wg := sync.WaitGroup{}
 	sema := make(chan bool, *conc)
@@ -57,6 +46,33 @@ func main() {
 		}(w)
 	}
 	wg.Wait()
+}
+
+func parseLine(line string) job {
+	host, port := line, "443"
+	if h, p, err := net.SplitHostPort(line); err == nil {
+		host, port = h, p
+	}
+	return job{host, port}
+}
+
+func fromArgs(work chan job, args []string) {
+	for _, arg := range args {
+		work <- parseLine(arg)
+	}
+	close(work)
+}
+
+func fromStdin(work chan job) {
+	s := bufio.NewScanner(os.Stdin)
+	for s.Scan() {
+		line := s.Text()
+		if line == "" {
+			continue
+		}
+		work <- parseLine(line)
+	}
+	close(work)
 }
 
 type job struct {

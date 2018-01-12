@@ -10,6 +10,15 @@ $ echo | openssl s_client -connect $hostname:$port 2> /dev/null | openssl x509 -
 ## example usage
 
 ```bash
+$ certexp google.com amazon.com imap.gmail.com:993
+google.com:443           2018-03-07 13:01:00 +0000 UTC
+imap.gmail.com:993       2018-03-07 13:02:00 +0000 UTC
+amazon.com:443           2018-09-21 23:59:59 +0000 UTC
+```
+
+or to stdin:
+
+```bash
 $ cat sites.txt
 apple.com
 google.com
